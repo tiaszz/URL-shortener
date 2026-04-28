@@ -9,12 +9,26 @@ import (
 )
 
 func main() {
-	urls := make(map[string]string)
-	http.HandleFunc("/", helloHandler)
-	http.HandleFunc("POST /shorten", shortenHandler(urls))
-	http.HandleFunc("GET /{code}", redirect(urls))
+	// urls := make(map[string]string)
+	// http.HandleFunc("/", helloHandler)
+	// http.HandleFunc("POST /shorten", shortenHandler(urls))
+	// http.HandleFunc("GET /{code}", redirect(urls))
+	//
+	// log.Fatal(http.ListenAndServe(":8080", nil))
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	db, err := CreateDatabase()
+	if err != nil {
+		log.Fatal("Failed to create/open database: ", err)
+	}
+	defer db.Close()
+
+	shortUrl := "4324dw"
+	longUrl := "google.com"
+
+	err = InsertData(db, shortUrl, longUrl)
+	if err != nil {
+		log.Fatal("Failed to insert data: ", err)
+	}
 }
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
