@@ -11,7 +11,9 @@ import (
 func main() {
 	urls := make(map[string]string)
 	http.HandleFunc("/", helloHandler)
-	http.HandleFunc("/shorten", getUrlHandler(urls))
+	http.HandleFunc("POST /shorten", shortenHandler(urls))
+	http.HandleFunc("GET /{code}", redirect(urls))
+
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
@@ -19,7 +21,7 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "./static/index.html")
 }
 
-func getUrlHandler(urls map[string]string) http.HandlerFunc {
+func shortenHandler(urls map[string]string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "POST only", http.StatusMethodNotAllowed)
@@ -28,18 +30,18 @@ func getUrlHandler(urls map[string]string) http.HandlerFunc {
 
 		longURL := r.FormValue("url")
 
-		err := generateMap(longURL, urls)
+		shortened, err := generateMap(longURL, urls)
 		if err != nil {
 			return
 		}
 
-		fmt.Fprintf(w, "you shortened url is: %s", urls[longURL])
+		fmt.Fprintf(w, "you shortened url is: localhost:8080/%s", shortened)
 		fmt.Println(urls)
 	}
 }
 
 func randomCode() string {
-	random := "localhost:8080/"
+	random := ""
 	useForRandom := "abcdefghijklmnoqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	for range 6 {
 		random += string(useForRandom[rand.IntN(len(useForRandom))])
@@ -48,13 +50,26 @@ func randomCode() string {
 	return random
 }
 
-func generateMap(originalUrl string, urls map[string]string) error {
+func generateMap(originalUrl string, urls map[string]string) (string, error) {
 	shortenUrl := randomCode()
-	_, exists := urls[originalUrl]
+	_, exists := urls[shortenUrl]
 	if exists {
-		return errors.New("The shortened version for this is already created")
+		return "", errors.New("The shortened version for this is already created")
 	}
 
-	urls[originalUrl] = shortenUrl
-	return nil
+	urls[shortenUrl] = originalUrl
+	return shortenUrl, nil
+}
+
+func redirect(urls map[string]string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		code := r.PathValue("code")
+		value, exists := urls[code]
+		if !exists {
+			http.Error(w, "You didn't shortened your code", http.StatusBadRequest)
+			return
+		}
+
+		http.Redirect(w, r, value, http.StatusMovedPermanently)
+	}
 }
