@@ -1,7 +1,7 @@
 package main
 
 import (
-	"errors"
+	"database/sql"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -9,33 +9,24 @@ import (
 )
 
 func main() {
-	// urls := make(map[string]string)
-	// http.HandleFunc("/", helloHandler)
-	// http.HandleFunc("POST /shorten", shortenHandler(urls))
-	// http.HandleFunc("GET /{code}", redirect(urls))
-	//
-	// log.Fatal(http.ListenAndServe(":8080", nil))
-
-	db, err := CreateDatabase()
+	db, err := CreateDatabase("links.db")
 	if err != nil {
 		log.Fatal("Failed to create/open database: ", err)
 	}
 	defer db.Close()
 
-	shortUrl := "4324dw"
-	longUrl := "google.com"
+	http.HandleFunc("/", helloHandler)
+	http.HandleFunc("POST /shorten", shortenHandler(db))
+	http.HandleFunc("GET /{code}", redirect(db))
 
-	err = InsertData(db, shortUrl, longUrl)
-	if err != nil {
-		log.Fatal("Failed to insert data: ", err)
-	}
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func helloHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "./static/index.html")
 }
 
-func shortenHandler(urls map[string]string) http.HandlerFunc {
+func shortenHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "POST only", http.StatusMethodNotAllowed)
@@ -43,14 +34,14 @@ func shortenHandler(urls map[string]string) http.HandlerFunc {
 		}
 
 		longURL := r.FormValue("url")
+		shortenUrl := randomCode()
 
-		shortened, err := generateMap(longURL, urls)
+		err := InsertData(db, shortenUrl, longURL)
 		if err != nil {
 			return
 		}
 
-		fmt.Fprintf(w, "you shortened url is: localhost:8080/%s", shortened)
-		fmt.Println(urls)
+		fmt.Fprintf(w, "you shortened url is: localhost:8080/%s", shortenUrl)
 	}
 }
 
@@ -64,23 +55,12 @@ func randomCode() string {
 	return random
 }
 
-func generateMap(originalUrl string, urls map[string]string) (string, error) {
-	shortenUrl := randomCode()
-	_, exists := urls[shortenUrl]
-	if exists {
-		return "", errors.New("The shortened version for this is already created")
-	}
-
-	urls[shortenUrl] = originalUrl
-	return shortenUrl, nil
-}
-
-func redirect(urls map[string]string) http.HandlerFunc {
+func redirect(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		code := r.PathValue("code")
-		value, exists := urls[code]
-		if !exists {
-			http.Error(w, "You didn't shortened your code", http.StatusBadRequest)
+		value, err := SelectData(db, code)
+		if err == sql.ErrNoRows {
+			http.NotFound(w, r)
 			return
 		}
 
